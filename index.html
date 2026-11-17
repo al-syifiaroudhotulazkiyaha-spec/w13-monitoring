@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitoring Kedekatan IoT - W13</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; background: #f4f6f8; color: #222; }
+    .card { background: #fff; padding: 16px 20px; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 12px; }
+    .box { background: #eef3f8; padding: 12px; border-radius: 6px; text-align: center; }
+    .val { font-size: 1.35em; font-weight: bold; color: #0b5ed7; margin-top: 4px; }
+    .status { font-size: 0.9em; color: #555; margin-top: 8px; }
+    .config { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    input { padding: 8px 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 0.95em; }
+    button { padding: 8px 14px; background: #0b5ed7; color: #fff; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+    button:hover { background: #094db1; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Dashboard Monitoring Kedekatan &amp; Alarm IoT</h2>
+    <p>Update terakhir ThingSpeak: <strong id="waktu">-</strong></p>
+    <div class="status" id="status">Memuat data...</div>
+
+    <div class="config">
+      <input type="text" id="inputChannel" placeholder="Masukkan angka Channel ID">
+      <button onclick="simpanChannel()">Simpan Channel ID</button>
+    </div>
+
+    <div class="grid">
+      <div class="box">Field 1 - Jarak<div class="val" id="f1">-</div></div>
+      <div class="box">Field 2 - PIR<div class="val" id="f2">-</div></div>
+      <div class="box">Field 3 - Alarm<div class="val" id="f3">-</div></div>
+      <div class="box">Field 4 - Kedekatan<div class="val" id="f4">-</div></div>
+      <div class="box">Field 5 - Rentang Valid<div class="val" id="f5">-</div></div>
+    </div>
+  </div>
+
+  <script>
+    // Ganti ISI_ANGKA_CHANNEL_ID dengan angka Channel ID dari bagian atas ThingSpeak (contoh: "2849102")
+    const DEFAULT_CHANNEL_ID = "ISI_ANGKA_CHANNEL_ID";
+    const READ_KEY = "J3DBYR54ZL9ZET0W";
+
+    let channelId = (DEFAULT_CHANNEL_ID !== "ISI_ANGKA_CHANNEL_ID" && DEFAULT_CHANNEL_ID.trim() !== "")
+      ? DEFAULT_CHANNEL_ID.trim()
+      : (localStorage.getItem("ts_channel_id") || "");
+
+    if (channelId) {
+      document.getElementById("inputChannel").value = channelId;
+    }
+
+    function simpanChannel() {
+      const val = document.getElementById("inputChannel").value.trim();
+      if (!/^\d+$/.test(val)) {
+        document.getElementById("status").textContent = "Channel ID harus berupa angka (lihat di bagian atas halaman ThingSpeak).";
+        return;
+      }
+      channelId = val;
+      localStorage.setItem("ts_channel_id", channelId);
+      ambilData();
+    }
+
+    async function ambilData() {
+      if (!channelId || !/^\d+$/.test(channelId)) {
+        document.getElementById("status").textContent = "Masukkan angka Channel ID ThingSpeak Anda di atas agar data tampil.";
+        return;
+      }
+
+      try {
+        const url = `https://api.thingspeak.com/channels/${channelId}/feeds/last.json?api_key=${READ_KEY}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const d = await res.json();
+
+        if (!d || !d.created_at) {
+          document.getElementById("status").textContent = "Terhubung, tetapi belum ada data masuk pada Channel ini.";
+          return;
+        }
+
+        document.getElementById("status").textContent = `Terhubung ke Channel ID: ${channelId} (Entry #${d.entry_id})`;
+        document.getElementById("waktu").textContent = new Date(d.created_at).toLocaleTimeString("id-ID");
+
+        const jarakNum = parseFloat(d.field1);
+        document.getElementById("f1").textContent = isNaN(jarakNum) ? "-" : (jarakNum < 0 ? "INVALID" : `${jarakNum.toFixed(1)} cm`);
+        document.getElementById("f2").textContent = d.field2 == "1" ? "1 (GERAK)" : (d.field2 == "0" ? "0 (DIAM)" : "-");
+        document.getElementById("f3").textContent = d.field3 == "1" ? "1 (ON)" : (d.field3 == "0" ? "0 (OFF)" : "-");
+        document.getElementById("f4").textContent = d.field4 !== null && d.field4 !== undefined ? `${parseFloat(d.field4).toFixed(1)} %` : "-";
+        document.getElementById("f5").textContent = d.field5 == "1" ? "1 (YA)" : (d.field5 == "0" ? "0 (TIDAK)" : "-");
+      } catch (err) {
+        document.getElementById("status").textContent = `Gagal mengambil data (${err.message}). Periksa angka Channel ID Anda.`;
+      }
+    }
+
+    ambilData();
+    setInterval(ambilData, 15000);
+  </script>
+</body>
+</html>
